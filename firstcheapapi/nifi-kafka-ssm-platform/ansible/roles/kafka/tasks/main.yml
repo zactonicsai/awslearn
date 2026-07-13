@@ -1,0 +1,129 @@
+---
+# Kafka 3.9 in KRaft mode. NO ZOOKEEPER.
+# ZooKeeper has been optional since Kafka 3.3 and was REMOVED
+# entirely in Kafka 4.0. Any tutorial telling you to install it is
+# out of date.
+
+- name: Install Java 21 (Kafka needs a JVM)
+  ansible.builtin.apt:
+    name: openjdk-21-jre-headless
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the kafka system user
+  ansible.builtin.user:
+    name: "{{ kafka_user }}"
+    system: true
+    shell: /usr/sbin/nologin # cannot be logged into. Good.
+    home: "{{ kafka_install_dir }}"
+    create_home: false
+
+- name: Create directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_user }}"
+    mode: "0755"
+  loop:
+    - "{{ kafka_install_dir }}"
+    - "{{ kafka_data_dir }}"
+
+- name: Download Kafka
+  ansible.builtin.get_url:
+    url: >-
+      https://downloads.apache.org/kafka/{{ kafka_version }}/kafka_{{ kafka_scala_version }}-{{ kafka_version }}.tgz
+    dest: /tmp/kafka.tgz
+    mode: "0644"
+    timeout: 180
+  register: kafka_download
+  retries: 3
+  delay: 10
+  until: kafka_download is succeeded
+
+- name: Unpack Kafka
+  ansible.builtin.unarchive:
+    src: /tmp/kafka.tgz
+    dest: "{{ kafka_install_dir }}"
+    remote_src: true
+    extra_opts: [--strip-components=1] # drop the top-level folder
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_user }}"
+    creates: "{{ kafka_install_dir }}/bin/kafka-server-start.sh" # <-- IDEMPOTENCY
+
+- name: Write the KRaft server config
+  ansible.builtin.template:
+    src: server.properties.j2
+    dest: "{{ kafka_install_dir }}/config/kraft/server.properties"
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_user }}"
+    mode: "0644"
+  notify: restart kafka
+
+- name: Check whether storage is already formatted
+  ansible.builtin.stat:
+    path: "{{ kafka_data_dir }}/meta.properties"
+  register: kafka_meta
+
+- name: Generate a cluster UUID (once, and only once)
+  ansible.builtin.command: "{{ kafka_install_dir }}/bin/kafka-storage.sh random-uuid"
+  register: cluster_uuid
+  changed_when: false
+  when: not kafka_meta.stat.exists
+
+- name: Format the storage directory
+  ansible.builtin.command: >-
+    {{ kafka_install_dir }}/bin/kafka-storage.sh format
+    -t {{ cluster_uuid.stdout }}
+    -c {{ kafka_install_dir }}/config/kraft/server.properties
+  become_user: "{{ kafka_user }}"
+  when: not kafka_meta.stat.exists
+  changed_when: true
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: kafka.service.j2
+    dest: /etc/systemd/system/kafka.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart kafka
+
+- name: Start and enable Kafka
+  ansible.builtin.systemd:
+    name: kafka
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Wait for Kafka to actually listen on 9092
+  ansible.builtin.wait_for:
+    port: 9092
+    host: "{{ ansible_default_ipv4.address }}"
+    timeout: 120
+
+- name: Create the topic
+  ansible.builtin.command: >-
+    {{ kafka_install_dir }}/bin/kafka-topics.sh
+    --bootstrap-server {{ ansible_default_ipv4.address }}:9092
+    --create --if-not-exists
+    --topic {{ kafka_topic }}
+    --partitions {{ kafka_partitions }}
+    --replication-factor 1
+  become_user: "{{ kafka_user }}"
+  register: topic_result
+  changed_when: "'Created topic' in topic_result.stdout"
+
+- name: Show the topic
+  ansible.builtin.command: >-
+    {{ kafka_install_dir }}/bin/kafka-topics.sh
+    --bootstrap-server {{ ansible_default_ipv4.address }}:9092
+    --describe --topic {{ kafka_topic }}
+  become_user: "{{ kafka_user }}"
+  register: topic_desc
+  changed_when: false
+
+- name: Topic details
+  ansible.builtin.debug:
+    var: topic_desc.stdout_lines

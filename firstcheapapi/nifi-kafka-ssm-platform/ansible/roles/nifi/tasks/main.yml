@@ -1,0 +1,135 @@
+---
+- name: Install Java 21
+  ansible.builtin.apt:
+    name: openjdk-21-jdk
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the nifi user
+  ansible.builtin.user:
+    name: "{{ nifi_user }}"
+    system: true
+    shell: /bin/bash
+    home: "{{ nifi_install_dir }}"
+    create_home: false
+
+- name: Create install dir
+  ansible.builtin.file:
+    path: "{{ nifi_install_dir }}"
+    state: directory
+    owner: "{{ nifi_user }}"
+    group: "{{ nifi_user }}"
+    mode: "0755"
+
+- name: Download NiFi (~1.5GB -- be patient)
+  ansible.builtin.get_url:
+    url: "https://downloads.apache.org/nifi/{{ nifi_version }}/nifi-{{ nifi_version }}-bin.zip"
+    dest: /tmp/nifi.zip
+    mode: "0644"
+    timeout: 900
+  register: nifi_dl
+  retries: 3
+  delay: 15
+  until: nifi_dl is succeeded
+
+# `unarchive` cannot --strip-components on a ZIP (that's a tar-only
+# option), and NiFi's zip has a top-level nifi-<version>/ folder.
+# So we extract and flatten by hand, guarded by `creates:` so it
+# stays idempotent.
+- name: Extract and flatten NiFi
+  ansible.builtin.shell: |
+    set -euo pipefail
+    rm -rf /tmp/nifi-extract
+    mkdir -p /tmp/nifi-extract
+    unzip -q /tmp/nifi.zip -d /tmp/nifi-extract
+    cp -a /tmp/nifi-extract/nifi-{{ nifi_version }}/. {{ nifi_install_dir }}/
+    chown -R {{ nifi_user }}:{{ nifi_user }} {{ nifi_install_dir }}
+    rm -rf /tmp/nifi-extract
+  args:
+    creates: "{{ nifi_install_dir }}/bin/nifi.sh"
+    executable: /bin/bash
+
+- name: Configure JVM initial heap
+  ansible.builtin.lineinfile:
+    path: "{{ nifi_install_dir }}/conf/bootstrap.conf"
+    regexp: '^java\.arg\.2='
+    line: "java.arg.2=-Xms{{ nifi_heap }}"
+  notify: restart nifi
+
+- name: Configure JVM max heap
+  ansible.builtin.lineinfile:
+    path: "{{ nifi_install_dir }}/conf/bootstrap.conf"
+    regexp: '^java\.arg\.3='
+    line: "java.arg.3=-Xmx{{ nifi_heap }}"
+  notify: restart nifi
+
+# ============================================================
+# THE PROXY HEADER GOTCHA
+#
+# NiFi checks the HTTP Host header on every request. Behind an ALB
+# that header is "nifi.example.com" -- which NiFi has never heard of.
+# So it rejects EVERY request with:
+#
+#   "System Error: The request contained an invalid host header"
+#
+# nifi.web.proxy.host is the whitelist of hostnames NiFi will accept.
+# You MUST include your ALB domain. This trips up literally everyone
+# who puts NiFi behind a load balancer.
+# ============================================================
+- name: Set nifi.web.proxy.host (THE line that makes the ALB work)
+  ansible.builtin.lineinfile:
+    path: "{{ nifi_install_dir }}/conf/nifi.properties"
+    regexp: '^nifi\.web\.proxy\.host='
+    line: >-
+      nifi.web.proxy.host={{ nifi_fqdn }}:443,{{ nifi_fqdn }},{{ ansible_default_ipv4.address }}:{{ nifi_web_port }},localhost:{{ nifi_web_port }}
+  notify: restart nifi
+
+- name: Bind the web UI to all interfaces
+  ansible.builtin.lineinfile:
+    path: "{{ nifi_install_dir }}/conf/nifi.properties"
+    regexp: '^nifi\.web\.https\.host='
+    line: "nifi.web.https.host=0.0.0.0"
+  notify: restart nifi
+
+- name: Set the HTTPS port
+  ansible.builtin.lineinfile:
+    path: "{{ nifi_install_dir }}/conf/nifi.properties"
+    regexp: '^nifi\.web\.https\.port='
+    line: "nifi.web.https.port={{ nifi_web_port }}"
+  notify: restart nifi
+
+- name: Set the single-user credentials
+  ansible.builtin.command: >-
+    {{ nifi_install_dir }}/bin/nifi.sh set-single-user-credentials
+    {{ nifi_admin_user }} {{ nifi_admin_password }}
+  become_user: "{{ nifi_user }}"
+  args:
+    creates: "{{ nifi_install_dir }}/conf/login-identity-providers.xml"
+  notify: restart nifi
+  no_log: true # don't print the password to the console
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: nifi.service.j2
+    dest: /etc/systemd/system/nifi.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart nifi
+
+- name: Start and enable NiFi
+  ansible.builtin.systemd:
+    name: nifi
+    state: started
+    enabled: true
+    daemon_reload: true
+
+# NiFi is SLOW to boot. 2-4 minutes is completely normal -- it is
+# unpacking hundreds of NAR bundles. Do not panic. Do not restart it.
+- name: Wait for NiFi (this genuinely takes several minutes)
+  ansible.builtin.wait_for:
+    port: "{{ nifi_web_port }}"
+    host: "{{ ansible_default_ipv4.address }}"
+    timeout: 420
+    delay: 30

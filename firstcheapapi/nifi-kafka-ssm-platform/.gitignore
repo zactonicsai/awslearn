@@ -1,0 +1,27 @@
+# NEVER commit these
+*.tfvars
+!*.tfvars.example
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+tfplan
+crash.log
+
+# There are no keys in this project (SSM-only), but just in case:
+*.pem
+*.key
+*.ppk
+id_rsa*
+id_ed25519*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

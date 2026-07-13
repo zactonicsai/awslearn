@@ -1,0 +1,15 @@
+---
+nifi_version: "2.0.0"
+nifi_install_dir: /opt/nifi
+nifi_user: nifi
+nifi_web_port: 8443
+nifi_http_listener_port: 9999
+nifi_heap: "4g"
+nifi_admin_user: "admin"
+
+# CHANGE THIS. NiFi refuses to start if the password is under 12 chars.
+# Better: pass it in with ansible-vault, or -e nifi_admin_password=...
+nifi_admin_password: "ChangeMe-LongPassword-123!"
+
+# Overridden by site.yml
+nifi_fqdn: "nifi.example.com"

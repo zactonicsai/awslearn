@@ -1,0 +1,12 @@
+---
+# Handlers only fire if a task NOTIFIED them AND that task changed
+# something. Ten tasks can notify "restart kafka" -- it restarts ONCE,
+# at the end. This is why you don't get ten restarts in a row.
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart kafka
+  ansible.builtin.systemd:
+    name: kafka
+    state: restarted

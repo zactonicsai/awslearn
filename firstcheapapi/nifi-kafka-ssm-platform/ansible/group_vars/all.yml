@@ -1,0 +1,49 @@
+---
+# group_vars/all.yml
+# ==================================================================
+# SSM CONNECTION SETTINGS
+#
+# These apply to EVERY host. They are what makes Ansible talk over
+# Systems Manager instead of SSH.
+# ==================================================================
+
+# Use the SSM connection plugin. Not SSH. Not paramiko. SSM.
+ansible_connection: community.aws.aws_ssm
+
+ansible_aws_ssm_region: us-east-1
+
+# The S3 bucket Ansible uses to hand modules to the target host.
+# Set this from the environment so the repo stays generic:
+#
+#   export ANSIBLE_AWS_SSM_BUCKET=$(terraform -chdir=../terraform \
+#     output -raw ssm_transfer_bucket)
+#
+ansible_aws_ssm_bucket_name: "{{ lookup('env', 'ANSIBLE_AWS_SSM_BUCKET') }}"
+
+# Path to the session-manager-plugin binary on the CONTROLLER
+# (i.e. on the Command Node). Installed by
+# scripts/00-bootstrap-command-node.sh.
+ansible_aws_ssm_plugin: /usr/local/sessionmanagerplugin/bin/session-manager-plugin
+
+# The SSM agent runs as root, so we land as root already. But become
+# is still set for clarity and for any task that drops privileges.
+ansible_become: true
+ansible_become_method: sudo
+
+# SSM sessions can take a few seconds to establish. Be patient.
+ansible_aws_ssm_timeout: 120
+
+# ==================================================================
+# WHY pipelining IS NOT SET HERE
+#
+# Pipelining is an SSH-specific optimization (it pipes the module
+# over the existing SSH connection instead of copying a temp file).
+# The SSM plugin has no SSH connection to pipe over. Setting
+# pipelining=True with aws_ssm produces confusing failures.
+#
+# The SSM equivalent optimization is the S3 transfer bucket, which
+# we already use. Nothing further to tune.
+# ==================================================================
+
+# ---------- APP CONFIG (shared by both roles) ----------
+kafka_topic: nifi-s3-files

@@ -1,0 +1,13 @@
+# Python deps for the trigger + consumer apps.
+#
+# Install inside a venv -- Ubuntu 24.04 enforces PEP 668 and will
+# refuse a bare `pip install`. Do NOT use --break-system-packages;
+# it does exactly what it says.
+#
+#   python3 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -r requirements.txt
+
+requests>=2.32.0
+kafka-python>=2.0.2
+boto3>=1.35.0

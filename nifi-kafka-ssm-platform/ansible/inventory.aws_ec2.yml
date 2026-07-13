@@ -1,0 +1,60 @@
+---
+# ==================================================================
+# DYNAMIC INVENTORY FOR SSM-ONLY ANSIBLE
+#
+# THE CRITICAL DIFFERENCE FROM AN SSH SETUP:
+#
+#   SSH inventory  -> hostnames are IP ADDRESSES   (10.20.11.42)
+#   SSM inventory  -> hostnames are INSTANCE IDS   (i-0abc123def456)
+#
+# SSM does not connect to an IP. It calls the AWS API with an
+# instance ID, and AWS routes the session to the agent on that box.
+# There is no network path involved from your side at all.
+#
+# If you leave `hostnames: private-ip-address` here (the SSH default),
+# the SSM plugin will try to StartSession against "10.20.11.42" and
+# fail with:
+#     "An error occurred (TargetNotConnected) ... is not connected"
+# ...which is a maddeningly unhelpful error for a hostname problem.
+# ==================================================================
+
+plugin: aws_ec2
+regions:
+  - us-east-1
+
+filters:
+  instance-state-name: running
+  tag:Project: nifi-platform
+
+# Auto-create groups from the Role tag.
+# An instance tagged Role=nifi lands in group "role_nifi".
+keyed_groups:
+  - key: tags.Role
+    prefix: role
+    separator: "_"
+
+# >>> THE LINE THAT MAKES SSM WORK <<<
+hostnames:
+  - instance-id
+
+compose:
+  # ansible_host MUST be the instance id for the aws_ssm plugin.
+  ansible_host: instance_id
+
+  # Use the SSM connection plugin instead of SSH.
+  ansible_connection: "'community.aws.aws_ssm'"
+
+  ansible_aws_ssm_region: "'us-east-1'"
+
+  # The S3 bucket the plugin uses to shuttle modules to the host.
+  # Prefer setting ANSIBLE_AWS_SSM_BUCKET in the environment so this
+  # file stays generic; this is the fallback.
+  # ansible_aws_ssm_bucket_name: "'CHANGE_ME'"
+
+  # Where the plugin drops files on the target.
+  ansible_aws_ssm_plugin: "'/usr/local/sessionmanagerplugin/bin/session-manager-plugin'"
+
+  # Keep the real private IP available as a normal var -- the playbooks
+  # still need it (e.g. Kafka's advertised.listeners). We just don't
+  # CONNECT to it.
+  private_ip: private_ip_address

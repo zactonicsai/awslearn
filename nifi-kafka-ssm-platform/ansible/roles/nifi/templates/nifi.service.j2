@@ -1,0 +1,23 @@
+# Managed by Ansible.
+[Unit]
+Description=Apache NiFi
+Documentation=https://nifi.apache.org/docs.html
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User={{ nifi_user }}
+Group={{ nifi_user }}
+ExecStart={{ nifi_install_dir }}/bin/nifi.sh start
+ExecStop={{ nifi_install_dir }}/bin/nifi.sh stop
+Restart=on-failure
+RestartSec=30
+# NiFi is SLOW to boot -- it unpacks hundreds of NAR bundles.
+# 2-4 minutes is NORMAL. Do not lower this.
+TimeoutStartSec=600
+LimitNOFILE=50000
+LimitNPROC=10000
+
+[Install]
+WantedBy=multi-user.target

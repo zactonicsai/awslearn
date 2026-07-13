@@ -1,0 +1,13 @@
+---
+# Install with:  ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: amazon.aws
+    version: ">=8.0.0"
+
+  # community.aws provides the aws_ssm CONNECTION PLUGIN.
+  # This is the collection that lets Ansible reach a host with no SSH.
+  # Without it, the entire SSM-only approach does not work.
+  - name: community.aws
+    version: ">=8.0.0"
+
+  - name: community.general

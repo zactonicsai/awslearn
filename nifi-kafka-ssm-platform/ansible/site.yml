@@ -1,0 +1,151 @@
+---
+# ==================================================================
+# site.yml -- the whole build, over SSM. No SSH.
+#
+# Run:
+#   export ANSIBLE_AWS_SSM_BUCKET=$(terraform -chdir=../terraform \
+#     output -raw ssm_transfer_bucket)
+#   ansible-playbook site.yml
+#
+# Dry run first:
+#   ansible-playbook site.yml --check --diff
+# ==================================================================
+
+# ------------------------------------------------------------------
+# PLAY 0: PREFLIGHT
+#
+# In an SSH world you'd just get "UNREACHABLE" and know your key or
+# port was wrong. Over SSM the failure modes are different and the
+# errors are worse. So we check the two things that actually break,
+# up front, with a clear message.
+# ------------------------------------------------------------------
+- name: Preflight -- verify the SSM path works
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Fail early if the SSM transfer bucket isn't set
+      ansible.builtin.assert:
+        that:
+          - ansible_aws_ssm_bucket_name is defined
+          - ansible_aws_ssm_bucket_name | length > 0
+        fail_msg: |
+
+          ANSIBLE_AWS_SSM_BUCKET is not set.
+
+          The aws_ssm connection plugin CANNOT work without an S3
+          bucket -- it's how modules get onto the target host.
+
+          Fix:
+            export ANSIBLE_AWS_SSM_BUCKET=$(terraform -chdir=../terraform \
+              output -raw ssm_transfer_bucket)
+
+        success_msg: "SSM transfer bucket: {{ ansible_aws_ssm_bucket_name }}"
+
+    - name: Check the session-manager-plugin is installed on this controller
+      ansible.builtin.stat:
+        path: "{{ ansible_aws_ssm_plugin }}"
+      register: smp
+
+    - name: Fail if session-manager-plugin is missing
+      ansible.builtin.assert:
+        that: smp.stat.exists
+        fail_msg: |
+
+          session-manager-plugin is not installed at:
+            {{ ansible_aws_ssm_plugin }}
+
+          Ansible's aws_ssm plugin shells out to this binary. Without
+          it, every connection fails.
+
+          Fix:  bash scripts/install-session-manager-plugin.sh
+
+# ------------------------------------------------------------------
+# PLAY 1: BASELINE
+# ------------------------------------------------------------------
+- name: Baseline on every host
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Confirm we really are connected over SSM (not SSH)
+      ansible.builtin.debug:
+        msg: >-
+          Connected to {{ inventory_hostname }}
+          ({{ private_ip | default('?') }})
+          via {{ ansible_connection }}
+          -- no SSH, no key, no open port.
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install common tools
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - unzip
+          - vim
+          - htop
+          - net-tools
+          - chrony # clock sync -- Kafka is VERY sensitive to drift
+        state: present
+
+    - name: Enable time sync
+      ansible.builtin.systemd:
+        name: chrony
+        state: started
+        enabled: true
+
+    - name: Make sure the SSM agent stays enabled
+      ansible.builtin.systemd:
+        name: snap.amazon-ssm-agent.amazon-ssm-agent.service
+        state: started
+        enabled: true
+      failed_when: false # snap unit name varies; don't hard-fail
+
+# ------------------------------------------------------------------
+# PLAY 2: KAFKA FIRST
+#
+# Order matters. NiFi will try to reach Kafka. If Kafka isn't up,
+# NiFi's PublishKafka processor sits in a retry loop. Not fatal,
+# but it makes the first run look broken when it isn't.
+# ------------------------------------------------------------------
+- name: Deploy Kafka
+  hosts: role_kafka
+  gather_facts: true
+  roles:
+    - kafka
+
+# ------------------------------------------------------------------
+# PLAY 3: THEN NIFI
+# ------------------------------------------------------------------
+- name: Deploy NiFi
+  hosts: role_nifi
+  gather_facts: true
+  vars:
+    # Pull Kafka's address straight out of Ansible's fact cache.
+    # No hardcoding, no copy-paste, survives a rebuild.
+    kafka_bootstrap: >-
+      {{ hostvars[groups['role_kafka'][0]]['ansible_default_ipv4']['address'] }}:9092
+
+    # >>> CHANGE THIS to your domain, or pass -e nifi_fqdn=... <<<
+    nifi_fqdn: "{{ lookup('env', 'NIFI_FQDN') | default('nifi.example.com', true) }}"
+  roles:
+    - nifi
+
+  post_tasks:
+    - name: Connection summary
+      ansible.builtin.debug:
+        msg:
+          - "NiFi UI     : https://{{ nifi_fqdn }}"
+          - "NiFi listen : {{ ansible_default_ipv4.address }}:{{ nifi_http_listener_port }}"
+          - "Kafka       : {{ kafka_bootstrap }}"
+          - "Topic       : {{ kafka_topic }}"
+          - ""
+          - "Shell on this box (NO SSH):"
+          - "  aws ssm start-session --target {{ inventory_hostname }}"

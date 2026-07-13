@@ -1,0 +1,7 @@
+.DS_Store
+first01/.terraform.lock.hcl
+first01/.terraform/
+first01/tfplan
+first01/tfplan.destroy
+first01/backend.tf
+first01/terraform.tfvars

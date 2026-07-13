@@ -1,0 +1,22 @@
+# Copy this file to terraform.tfvars and edit it before running Terraform.
+
+aws_region   = "us-east-1"
+project_name = "cloud-team-playbook"
+environment  = "dev"
+
+# Replace this with your current public IP /32.
+# Example command on Mac/Linux/Git Bash:
+#   curl -s https://checkip.amazonaws.com
+allowed_alb_cidrs = ["YOUR_PUBLIC_IP/32"]
+
+# Leave these alone for the simple lab, or change them if they overlap with existing networks.
+vpc_cidr             = "10.50.0.0/16"
+public_subnet_cidrs  = ["10.50.1.0/24", "10.50.2.0/24"]
+private_subnet_cidrs = ["10.50.11.0/24", "10.50.12.0/24"]
+
+# t3.micro is small and cheap, but not free in every account/Region.
+instance_type = "t3.micro"
+
+# Optional Route 53 settings. Leave route53_zone_name empty to skip DNS.
+route53_zone_name   = ""
+route53_record_name = "app.example.com"

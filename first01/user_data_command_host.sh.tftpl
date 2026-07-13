@@ -1,0 +1,35 @@
+#!/bin/bash
+# Stop on errors, show commands, and fail if a piped command fails.
+set -euxo pipefail
+
+# Save all boot messages to a log file and the EC2 console log.
+exec > >(tee /var/log/user-data-command-host.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+# Update the instance packages.
+dnf update -y
+
+# Install base admin tools.
+dnf install -y python3 python3-pip git unzip tar wget jq awscli dnf-plugins-core
+
+# Add the official HashiCorp Amazon Linux repo, then install Terraform.
+dnf config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+dnf install -y terraform
+
+# Install Ansible in a Python virtual environment to avoid changing system Python packages.
+python3 -m venv /opt/ansible-venv
+/opt/ansible-venv/bin/python -m pip install --upgrade pip
+/opt/ansible-venv/bin/python -m pip install --upgrade ansible
+ln -sf /opt/ansible-venv/bin/ansible /usr/local/bin/ansible
+ln -sf /opt/ansible-venv/bin/ansible-playbook /usr/local/bin/ansible-playbook
+
+# Create a working folder for cloud team scripts.
+mkdir -p /opt/cloud-team
+cat > /opt/cloud-team/README.txt <<'README'
+This is the private command host.
+Access it through AWS Systems Manager Session Manager.
+Useful checks:
+  terraform version
+  ansible --version
+  aws sts get-caller-identity
+  cat /var/log/user-data-command-host.log
+README

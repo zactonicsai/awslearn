@@ -1,0 +1,34 @@
+---
+# Run this on the command host after you connect with SSM:
+#   ansible-playbook ansible/playbooks/verify-command-host.yml
+- name: Verify command host tools
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Show Terraform version
+      ansible.builtin.command: terraform version
+      register: terraform_version
+      changed_when: false
+
+    - name: Print Terraform version
+      ansible.builtin.debug:
+        var: terraform_version.stdout_lines
+
+    - name: Show Ansible version
+      ansible.builtin.command: ansible --version
+      register: ansible_version
+      changed_when: false
+
+    - name: Print Ansible version
+      ansible.builtin.debug:
+        var: ansible_version.stdout_lines
+
+    - name: Show AWS caller identity available to the instance role
+      ansible.builtin.command: aws sts get-caller-identity
+      register: aws_identity
+      changed_when: false
+
+    - name: Print AWS caller identity
+      ansible.builtin.debug:
+        var: aws_identity.stdout

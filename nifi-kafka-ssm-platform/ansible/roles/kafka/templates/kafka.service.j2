@@ -1,0 +1,20 @@
+# Managed by Ansible.
+[Unit]
+Description=Apache Kafka (KRaft mode, no ZooKeeper)
+Documentation=https://kafka.apache.org/documentation/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ kafka_user }}
+Group={{ kafka_user }}
+Environment="KAFKA_HEAP_OPTS={{ kafka_heap }}"
+ExecStart={{ kafka_install_dir }}/bin/kafka-server-start.sh {{ kafka_install_dir }}/config/kraft/server.properties
+ExecStop={{ kafka_install_dir }}/bin/kafka-server-stop.sh
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=100000
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,30 @@
+#!/bin/bash
+# Stop on errors, show commands, and fail if a piped command fails.
+set -euxo pipefail
+
+# Save all boot messages to a log file and the EC2 console log.
+exec > >(tee /var/log/user-data-app.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+# Update the instance packages.
+dnf update -y
+
+# Install Apache HTTP server and AWS CLI.
+dnf install -y httpd awscli
+
+# Start Apache now and after every reboot.
+systemctl enable --now httpd
+
+# Create the web root directory.
+mkdir -p /var/www/html
+
+# Copy the website files from the private S3 asset bucket to the local web root.
+aws s3 sync "s3://${asset_bucket_name}/" /var/www/html/ --region "${aws_region}"
+
+# Set safe ownership for Apache.
+chown -R apache:apache /var/www/html
+
+# Restart Apache so it serves the latest files.
+systemctl restart httpd
+
+# Write a simple local health file.
+echo "ok" > /var/www/html/health.txt

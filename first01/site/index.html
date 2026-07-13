@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AWS Cloud Team Hello World</title>
+  <link rel="stylesheet" href="/assets/tailwind-local.css" />
+</head>
+<body class="min-h-screen bg-slate-950 text-white">
+  <main class="mx-auto max-w-5xl px-6 py-12">
+    <section class="rounded-2xl border border-slate-700 bg-slate-900 p-8 shadow-xl">
+      <p class="text-sm font-semibold uppercase tracking-wider text-sky-300">AWS Cloud Team Playbook</p>
+      <h1 class="mt-4 text-4xl font-bold tracking-tight">Hello World from a private EC2 web server</h1>
+      <p class="mt-4 text-lg text-slate-300">
+        This page started in a private S3 bucket, was copied to a private EC2 instance,
+        and is being served through an Application Load Balancer on port <strong>7777</strong>.
+      </p>
+      <div class="mt-8 grid gap-4 md-grid-cols-3">
+        <div class="rounded-xl bg-slate-800 p-4">
+          <h2 class="font-bold text-sky-200">Public Entry</h2>
+          <p class="mt-2 text-sm text-slate-300">Only trusted CIDRs can reach the ALB.</p>
+        </div>
+        <div class="rounded-xl bg-slate-800 p-4">
+          <h2 class="font-bold text-sky-200">Private App</h2>
+          <p class="mt-2 text-sm text-slate-300">The EC2 web server has no public IP.</p>
+        </div>
+        <div class="rounded-xl bg-slate-800 p-4">
+          <h2 class="font-bold text-sky-200">SSM Admin</h2>
+          <p class="mt-2 text-sm text-slate-300">The command host uses Session Manager, not SSH.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

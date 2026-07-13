@@ -1,0 +1,69 @@
+# Managed by Ansible. Local edits will be overwritten.
+# KRaft mode: this ONE node is both broker and controller.
+# In production you'd separate these and run 3+ controllers.
+
+process.roles=broker,controller
+node.id=1
+controller.quorum.voters=1@{{ ansible_default_ipv4.address }}:9093
+
+# ============================================================
+# THE #1 KAFKA GOTCHA, EXPLAINED
+#
+# listeners            = "what socket do I BIND to?"
+# advertised.listeners = "what address do I TELL CLIENTS to use?"
+#
+# Kafka's protocol works like this: a client connects to the
+# bootstrap server and asks "who are the brokers?" Kafka replies
+# with the ADVERTISED address. The client then DISCONNECTS and
+# RECONNECTS to that advertised address.
+#
+# If advertised.listeners says "localhost", the client will try to
+# connect to ITS OWN localhost, find nothing, and hang forever.
+# This is the single most confusing failure in all of Kafka -- it
+# connects fine, then times out with no useful error.
+#
+# ALWAYS advertise an address the client can actually reach.
+# ============================================================
+listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+advertised.listeners=PLAINTEXT://{{ ansible_default_ipv4.address }}:9092
+controller.listener.names=CONTROLLER
+listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+inter.broker.listener.name=PLAINTEXT
+
+log.dirs={{ kafka_data_dir }}
+
+num.network.threads=3
+num.io.threads=8
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+
+# Single node = replication factor MUST be 1. You cannot replicate
+# to yourself. Setting these to 3 on one broker makes every topic
+# creation fail.
+offsets.topic.replication.factor=1
+transaction.state.log.replication.factor=1
+transaction.state.log.min.isr=1
+default.replication.factor=1
+min.insync.replicas=1
+
+num.partitions={{ kafka_partitions }}
+auto.create.topics.enable=true
+
+# Keep messages 7 days
+log.retention.hours=168
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000
+
+# ============================================================
+# PLAINTEXT means UNENCRYPTED.
+#
+# This is acceptable ONLY because:
+#   - Kafka sits in a private subnet with no internet route
+#   - Its security group admits EXACTLY two source SGs on 9092
+#   - There is no SSH on the box to pivot from
+#
+# For real data, configure SASL_SSL + SCRAM + ACLs. The security
+# group is a strong outer wall; it is not a substitute for
+# authentication on the wire.
+# ============================================================

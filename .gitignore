@@ -5,3 +5,9 @@ first01/tfplan
 first01/tfplan.destroy
 first01/backend.tf
 first01/terraform.tfvars
+firstcheapapi/terraform/.terraform.lock.hcl
+firstcheapapi/terraform/tfplan
+firstcheapapi/terraform/tfdestroy
+firstcheapapi/terraform/terraform.tfvars
+cloud-team-playbook (1).json
+firstcheapapi/terraform/.terraform/

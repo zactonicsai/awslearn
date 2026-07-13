@@ -154,3 +154,43 @@ terraform init -migrate-state
 - Add CloudWatch log collection from Apache and user-data logs.
 - Replace broad outbound security group rules with narrower egress rules.
 - Use a CI/CD pipeline with manual approval for `terraform apply` and `terraform destroy`.
+
+
+For the Terraform lab I created, assume **us-east-1**, **2 private EC2 instances**, **1 NAT Gateway**, **1 public ALB**, **2 small EBS root disks**, and very little traffic.
+
+Estimated cost:
+
+| Item                                                         |                        Approx daily cost |
+| ------------------------------------------------------------ | ---------------------------------------: |
+| NAT Gateway hourly cost                                      |                            **$1.08/day** |
+| Application Load Balancer + 1 low-usage LCU                  |                            **$0.73/day** |
+| Two `t3.micro` EC2 instances                                 |                            **$0.50/day** |
+| Public IPv4 addresses, roughly 3 IPs: NAT + ALB across 2 AZs |                            **$0.36/day** |
+| Two 8 GB gp3 EBS root volumes                                |                            **$0.04/day** |
+| Route 53 hosted zone, if you create/use one                  |                            **$0.02/day** |
+| S3 buckets for site + Terraform state                        | Usually **pennies or less** for this lab |
+
+**Total estimate: about `$2.70 to $3.00 per day`** with low traffic.
+
+That is about **$81 to $90 per month** if left running all month.
+
+The biggest cost is the **NAT Gateway**, which is about **$0.045/hour**, or **$1.08/day**, before data processing charges. AWS also charges NAT data processing by GB. ([Amazon Web Services, Inc.][1])
+
+The ALB is about **$0.0225/hour** plus LCU usage. For a small hello-world lab, I estimated 1 LCU, giving about **$0.73/day**. ([Amazon Web Services, Inc.][2])
+
+The two `t3.micro` instances are about **$0.50/day total** using the common US East Linux on-demand price estimate of `$0.0104/hour` each. ([Vantage][3])
+
+AWS charges for public IPv4 addresses, including service-managed public IPv4 addresses used by services like internet-facing load balancers and NAT gateways, at about **$0.005/IP/hour**. ([Amazon Web Services, Inc.][4])
+
+To reduce cost, the fastest change is to **destroy the lab when done**:
+
+```bash
+./scripts/destroy.sh
+```
+
+For a cheaper version, remove the NAT Gateway and use **VPC endpoints for SSM/S3** or temporarily allow package install during build time only. That can cut the lab by roughly **$1.20+ per day**.
+
+[1]: https://aws.amazon.com/vpc/pricing/?utm_source=chatgpt.com "Amazon VPC Pricing"
+[2]: https://aws.amazon.com/elasticloadbalancing/pricing/?utm_source=chatgpt.com "Elastic Load Balancing pricing"
+[3]: https://instances.vantage.sh/aws/ec2/t3.micro?utm_source=chatgpt.com "t3.micro pricing and specs - Amazon EC2 Instance Comparison"
+[4]: https://aws.amazon.com/blogs/networking-and-content-delivery/identify-and-optimize-public-ipv4-address-usage-on-aws/?utm_source=chatgpt.com "Identify and optimize public IPv4 address usage on AWS"

@@ -1,0 +1,23 @@
+# Set the AWS Region for this small API lab.
+aws_region = "us-east-1"
+
+# Set the project name used in AWS resource names.
+project_name = "hello-python-api"
+
+# Set the environment name used in AWS resource names.
+environment = "dev"
+
+# Use the current Python runtime for the Lambda function.
+lambda_runtime = "python3.14"
+
+# Keep Lambda at the smallest common memory size for a hello-world API.
+lambda_memory_size = 128
+
+# Keep the timeout short because this API should answer very quickly.
+lambda_timeout_seconds = 10
+
+# Keep logs for only 7 days so test logs do not sit forever.
+log_retention_days = 7
+
+# Allow browser calls from anywhere for this simple lab.
+allowed_cors_origins = ["*"]

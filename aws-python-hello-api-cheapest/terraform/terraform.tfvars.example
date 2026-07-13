@@ -1,0 +1,30 @@
+# Set the AWS Region for this small API lab.
+aws_region = "us-east-1"
+
+# Set the project name used in AWS resource names.
+project_name = "hello-python-api"
+
+# Set the environment name used in AWS resource names.
+environment = "dev"
+
+# Use the Python runtime for the Lambda function.
+# If your AWS Region/account does not support python3.14 yet, change this to python3.13.
+lambda_runtime = "python3.14"
+
+# Keep Lambda at the smallest common memory size for a hello-world API.
+lambda_memory_size = 128
+
+# Keep the timeout short because this API should answer very quickly.
+lambda_timeout_seconds = 10
+
+# Keep logs for only 7 days so test logs do not sit forever.
+log_retention_days = 7
+
+# CORS means: "Which browser websites may call this API from JavaScript?"
+# For the simplest lab, use ["*"].
+# Do NOT put a bare IP address here, such as ["68.32.112.68"]. That is invalid for CORS.
+# Valid examples:
+# allowed_cors_origins = ["*"]
+# allowed_cors_origins = ["http://localhost:3000"]
+# allowed_cors_origins = ["https://www.example.com"]
+allowed_cors_origins = ["*"]
